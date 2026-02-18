@@ -71,6 +71,7 @@ function Store.new()
 			displayOrder = 0,
 		},
 
+		characterEpoch = 0,
 		screens = {},
 		active = {},
 		initialScreens = {},

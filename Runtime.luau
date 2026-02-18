@@ -1,5 +1,6 @@
 --!strict
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
 local Store = require(script.Parent.Store)
 
@@ -32,6 +33,12 @@ local _keyIndex: { [Enum.KeyCode]: { KeyBindingEntry } } = {}
 local function assertMounted()
 	if not _store:getState().mounted then
 		error("[ui_runtime] Not mounted. Call UIRuntime.mount(...) first.")
+	end
+end
+
+local function waitFrames(n: number)
+	for _ = 1, n do
+		RunService.Heartbeat:Wait()
 	end
 end
 
@@ -273,9 +280,8 @@ function Runtime.mount(opts: MountOptions)
 			s.lifecycle.isCharacterReady = true
 			s.lifecycle.character = character
 			s.lifecycle.humanoid = loader:GetHumanoid()
+			s.characterEpoch = (s.characterEpoch or 0) + 1
 		end)
-
-		-- ✅ apply per-character initial screens on every (re)spawn
 		Runtime._applyCharacterInitialScreens()
 	end)
 
@@ -461,13 +467,39 @@ function Runtime._applyCharacterInitialScreens()
 		return
 	end
 
-	for _, id in ipairs(ids) do
-		if st.screens[id] then
-			Runtime.open(id)
-		else
-			warn(("[ui_runtime] ✗ Character initial screen '%s' not registered"):format(id))
+	-- Capture the current epoch so we can cancel if another respawn happens
+	local epoch = st.characterEpoch or 0
+
+	-- Defer so it happens after the current tick, then after a couple frames
+	task.defer(function()
+		-- Let CharacterRemoving cleanup + any React commit happen
+		waitFrames(5)
+
+		local st2 = _store:getState()
+		if not st2.mounted then
+			return
 		end
-	end
+		if not st2.lifecycle.isCharacterReady then
+			return
+		end
+		if (st2.characterEpoch or 0) ~= epoch then
+			-- A newer character took over; ignore
+			return
+		end
+
+		local ids2 = st2.characterInitialScreens
+		if not ids2 or #ids2 == 0 then
+			return
+		end
+
+		for _, id in ipairs(ids2) do
+			if st2.screens[id] then
+				Runtime.open(id)
+			else
+				warn(("[ui_runtime] ✗ Character initial screen '%s' not registered"):format(id))
+			end
+		end
+	end)
 end
 
 function Runtime._handleCharacterRemoving()
