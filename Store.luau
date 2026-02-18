@@ -38,7 +38,12 @@ export type State = {
 
 	screens: { [string]: ScreenDef },
 	active: { [string]: boolean },
+
+	-- Boot-time initial screens (ex: CharacterSelect)
 	initialScreens: { string },
+
+	-- Character-ready initial screens (ex: HUD, Notifications)
+	characterInitialScreens: { string },
 
 	lifecycle: LifecycleState,
 }
@@ -69,6 +74,7 @@ function Store.new()
 		screens = {},
 		active = {},
 		initialScreens = {},
+		characterInitialScreens = {},
 
 		lifecycle = {
 			isCharacterReady = false,

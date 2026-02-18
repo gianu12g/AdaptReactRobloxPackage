@@ -274,6 +274,9 @@ function Runtime.mount(opts: MountOptions)
 			s.lifecycle.character = character
 			s.lifecycle.humanoid = loader:GetHumanoid()
 		end)
+
+		-- ✅ apply per-character initial screens on every (re)spawn
+		Runtime._applyCharacterInitialScreens()
 	end)
 
 	loader.CharacterRemoving:Connect(function()
@@ -342,23 +345,6 @@ function Runtime.registerScreen(id: string, component: any, meta)
 		}
 	end)
 
-	local bindInfo = "none"
-	if screenMeta.binds then
-		local parts = {}
-		if screenMeta.binds.toggleKey then
-			table.insert(parts, "toggle=" .. tostring(screenMeta.binds.toggleKey))
-		end
-		if screenMeta.binds.openKey then
-			table.insert(parts, "open=" .. tostring(screenMeta.binds.openKey))
-		end
-		if screenMeta.binds.closeKey then
-			table.insert(parts, "close=" .. tostring(screenMeta.binds.closeKey))
-		end
-		if #parts > 0 then
-			bindInfo = table.concat(parts, ", ")
-		end
-	end
-
 	_rebuildKeyIndexAndWarnConflicts()
 end
 
@@ -369,6 +355,19 @@ function Runtime.setInitialScreens(ids: { string })
 		s.initialScreens = ids
 	end)
 	Runtime._applyInitialScreens()
+end
+
+-- ✅ NEW: Per-character initial screens (reapplied on every respawn)
+function Runtime.setCharacterInitialScreens(ids: { string })
+	assertMounted()
+
+	_store:setState(function(s)
+		s.characterInitialScreens = ids
+	end)
+
+	if _store:getState().lifecycle.isCharacterReady then
+		Runtime._applyCharacterInitialScreens()
+	end
 end
 
 function Runtime.open(id: string)
@@ -436,6 +435,7 @@ function Runtime._applyInitialScreens()
 		return
 	end
 
+	-- Only apply if nothing is currently open
 	for _ in pairs(st.active) do
 		return
 	end
@@ -445,6 +445,27 @@ function Runtime._applyInitialScreens()
 			Runtime.open(id)
 		else
 			warn(("[ui_runtime] ✗ Initial screen '%s' not registered"):format(id))
+		end
+	end
+end
+
+-- ✅ NEW: apply per-character initial screens (runs on every character ready)
+function Runtime._applyCharacterInitialScreens()
+	local st = _store:getState()
+	if not st.mounted or not st.lifecycle.isCharacterReady then
+		return
+	end
+
+	local ids = st.characterInitialScreens
+	if not ids or #ids == 0 then
+		return
+	end
+
+	for _, id in ipairs(ids) do
+		if st.screens[id] then
+			Runtime.open(id)
+		else
+			warn(("[ui_runtime] ✗ Character initial screen '%s' not registered"):format(id))
 		end
 	end
 end
@@ -482,6 +503,7 @@ function Runtime.unmount()
 		s.screens = {}
 		s.active = {}
 		s.initialScreens = {}
+		s.characterInitialScreens = {}
 		s.lifecycle.isCharacterReady = false
 		s.lifecycle.character = nil
 		s.lifecycle.humanoid = nil
